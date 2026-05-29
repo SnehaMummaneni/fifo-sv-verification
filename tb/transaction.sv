@@ -1,0 +1,14 @@
+class transaction;
+    rand bit [31:0] din;
+    rand bit        wr_en;
+    rand bit        rd_en;
+    bit [31:0]      dout;
+    bit             full;
+    bit             empty;
+
+    constraint wr_rd_en { wr_en != rd_en; }
+
+    function void print(string tag = "TXN");
+    $display("[%s] wr=%0b rd=%0b din=0x%08h | dout=0x%08h full=%0b empty=%0b",tag, wr_en, rd_en, din, dout, full, empty);
+    endfunction
+endclass
