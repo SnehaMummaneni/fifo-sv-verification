@@ -1,4 +1,4 @@
-interface fifo_if (input logic clk, input logic rst);
+interface fifo_if (input logic clk);
 
     logic [31:0] din;
     logic        wr_en;
@@ -6,6 +6,7 @@ interface fifo_if (input logic clk, input logic rst);
     logic [31:0] dout;
     logic        full;
     logic        empty;
+    logic        rst;   // plain logic — writable from tasks
 
     clocking driver_cb @(posedge clk);
         default input #1 output #1;
@@ -21,7 +22,7 @@ interface fifo_if (input logic clk, input logic rst);
     modport DRIVER  (clocking driver_cb,  input clk, rst);
     modport MONITOR (clocking monitor_cb, input clk, rst);
 
-    // ── ASSERTIONS (raw signals — race-free in Observed region) ──
+    // ── ASSERTIONS ───────────────────────────────────────────
     property p_no_overflow;
         @(posedge clk) disable iff (rst)
         not (wr_en && full);
@@ -45,12 +46,12 @@ interface fifo_if (input logic clk, input logic rst);
 
     property p_reset_empties;
         @(posedge clk)
-        $fell(rst) |=> empty;   // active-HIGH rst: fell = reset released
+        $fell(rst) |=> empty;
     endproperty
     assert_reset_empties: assert property(p_reset_empties)
         else $error("[ASSERT] not empty after reset at %0t", $time);
 
-    // ── COVERAGE ─────────────────────────────────────────────────
+    // ── COVERAGE ─────────────────────────────────────────────
     covergroup fifo_cg @(posedge clk);
         option.per_instance = 1;
         cp_wr:    coverpoint wr_en;
@@ -60,6 +61,8 @@ interface fifo_if (input logic clk, input logic rst);
         cp_op: coverpoint {wr_en, rd_en} {
             bins write_only = {2'b10};
             bins read_only  = {2'b01};
+            bins neither    = {2'b00};
+            // 2'b11 excluded — protocol violation
         }
         cx_op_full:  cross cp_op, cp_full;
         cx_op_empty: cross cp_op, cp_empty;

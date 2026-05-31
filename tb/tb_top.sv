@@ -1,18 +1,17 @@
 module tb_top;
 
     bit clk;
-    bit rst;
 
     always #5 clk = ~clk;
 
-    // active-HIGH reset: assert for 5 cycles then release
-    initial begin
-        rst = 1;
-        repeat(5) @(posedge clk);
-        rst = 0;
-    end
+    fifo_if intf (clk);
 
-    fifo_if intf (clk, rst);
+    // drive rst through interface — not as a port
+    initial begin
+        intf.rst = 1;
+        repeat(5) @(posedge clk);
+        intf.rst = 0;
+    end
 
     test_prog t1 (intf);
 
@@ -27,11 +26,16 @@ module tb_top;
         .rst     (intf.rst)
     );
 
-    // safety watchdog
+    // generous watchdog — 100 txns + directed tests need time
     initial begin
-        #100_000;
+        #2_000_000;
         $display("[TB] TIMEOUT — forcing finish");
         $finish;
+    end
+
+    initial begin
+        $dumpfile("dump.vcd");
+        $dumpvars;
     end
 
 endmodule

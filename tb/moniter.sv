@@ -1,12 +1,12 @@
 class monitor;
     virtual fifo_if        vif;
     mailbox #(transaction) mon2scb;
-    mailbox #(transaction) pending;   // internal: reads waiting for dout
+    mailbox #(transaction) pending;
 
     function new(virtual fifo_if vif, mailbox #(transaction) mon2scb);
         this.vif     = vif;
         this.mon2scb = mon2scb;
-        this.pending = new();         // unbounded internal mailbox
+        this.pending = new();
     endfunction
 
     task capture_controls();
@@ -14,7 +14,6 @@ class monitor;
         forever begin
             @(vif.monitor_cb);
 
-            // skip idle and suppressed reads
             if (!vif.monitor_cb.wr_en && !vif.monitor_cb.rd_en) continue;
             if ( vif.monitor_cb.rd_en &&  vif.monitor_cb.empty)  continue;
 
@@ -26,11 +25,11 @@ class monitor;
             txn.din   = vif.monitor_cb.wr_en ? vif.monitor_cb.din : 0;
             txn.dout  = 0;
 
-            if (txn.rd_en) begin
-                pending.put(txn);     // Thread B will fill dout
-            end else begin
+            if (txn.rd_en)
+                pending.put(txn);
+            else begin
                 txn.print("MON");
-                mon2scb.put(txn);     // write-only: send immediately
+                mon2scb.put(txn);
             end
         end
     endtask
@@ -39,7 +38,7 @@ class monitor;
         transaction txn;
         forever begin
             pending.get(txn);
-            @(vif.monitor_cb);        // one cycle later — dout valid
+            @(vif.monitor_cb);
             txn.dout = vif.monitor_cb.dout;
             txn.print("MON");
             mon2scb.put(txn);

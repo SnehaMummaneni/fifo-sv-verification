@@ -6,9 +6,17 @@ class transaction;
     bit             full;
     bit             empty;
 
-    constraint wr_rd_en { wr_en != rd_en; }
+    constraint c_ops {
+        {wr_en, rd_en} dist {
+            2'b10 := 50,
+            2'b01 := 40,
+            2'b00 := 10
+          
+        };
+    }
 
     function void print(string tag = "TXN");
-    $display("[%s] wr=%0b rd=%0b din=0x%08h | dout=0x%08h full=%0b empty=%0b",tag, wr_en, rd_en, din, dout, full, empty);
+        $display("[%s] wr=%0b rd=%0b din=0x%08h | dout=0x%08h full=%0b empty=%0b",
+                  tag, wr_en, rd_en, din, dout, full, empty);
     endfunction
 endclass

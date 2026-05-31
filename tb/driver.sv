@@ -8,14 +8,13 @@ class driver;
         this.gen2drv = gen2drv;
     endfunction
 
-    // wait for active-HIGH reset to complete
     task reset();
         $display("[DRV] Waiting for reset");
         vif.driver_cb.wr_en <= 0;
         vif.driver_cb.rd_en <= 0;
         vif.driver_cb.din   <= 0;
-        wait(vif.rst  == 1);   // wait rst goes HIGH
-        wait(vif.rst  == 0);   // wait rst goes LOW (released)
+        wait(vif.rst == 1);
+        wait(vif.rst == 0);
         $display("[DRV] Reset done");
     endtask
 
@@ -24,9 +23,8 @@ class driver;
             transaction trans;
             gen2drv.get(trans);
 
-            @(vif.driver_cb);   // sync to clock edge
+            @(vif.driver_cb);
 
-            // default: deassert everything
             vif.driver_cb.wr_en <= 0;
             vif.driver_cb.rd_en <= 0;
             vif.driver_cb.din   <= 0;
@@ -46,9 +44,9 @@ class driver;
             if (trans.rd_en) begin
                 if (!vif.driver_cb.empty) begin
                     vif.driver_cb.rd_en <= 1;
-                    @(vif.driver_cb);               // assert for one cycle
+                    @(vif.driver_cb);
                     vif.driver_cb.rd_en <= 0;
-                    @(vif.driver_cb);               // dout valid after this edge
+                    @(vif.driver_cb);
                     trans.dout  = vif.driver_cb.dout;
                     trans.full  = vif.driver_cb.full;
                     trans.empty = vif.driver_cb.empty;
@@ -66,7 +64,7 @@ class driver;
     task main();
         forever begin
             fork
-                begin wait(vif.rst == 1); end   // watch for reset
+                begin wait(vif.rst == 1); end
                 begin drive();            end
             join_any
             disable fork;

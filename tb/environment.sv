@@ -14,7 +14,6 @@ class environment;
         this.vif = vif;
         gen2drv  = new();
         mon2scb  = new();
-        // typed mailboxes passed to each component
         gen = new(gen2drv, drv2gen);
         drv = new(vif, gen2drv);
         mon = new(vif, mon2scb);
@@ -35,19 +34,31 @@ class environment;
     endtask
 
     task post_test();
-        // wait for generator to finish all txns
         wait(drv2gen.triggered);
-        // give driver time to finish last transaction
         repeat(20) @(posedge vif.clk);
-        // give scoreboard time to process last entry
         #200;
+    endtask
+
+    // KEY FIX: stop all background threads before directed tests
+    task stop_threads();
+        disable fork;
+        $display("[ENV] All background threads stopped");
+        // flush pending mailbox entries
+        begin
+            transaction t;
+            while (gen2drv.num() > 0) gen2drv.get(t);
+        end
+        // deassert all signals
+        @(posedge vif.clk); #1;
+        vif.wr_en = 0;
+        vif.rd_en = 0;
+        vif.din   = 0;
+        repeat(5) @(posedge vif.clk);
     endtask
 
     task run();
         pre_test();
         test();
         post_test();
-        scb.report();
-        $finish;
     endtask
 endclass
