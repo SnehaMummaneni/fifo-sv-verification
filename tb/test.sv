@@ -24,25 +24,30 @@ program test_prog (fifo_if intf);
 
         // ── PHASE 5: Reset mid-operation ─────────────────
         test_reset(intf, env);
-
-        // ── FINAL REPORT ─────────────────────────────────
-        repeat(5) @(posedge intf.clk);
-        env.scb.report();
-        $display("--------------------------------");
-        $display("Covergroup Coverage = %0.2f%%",
-                  intf.cg_inst.get_coverage());
-        $display("  cp_wr       = %0.2f%%", intf.cg_inst.cp_wr.get_coverage());
-        $display("  cp_rd       = %0.2f%%", intf.cg_inst.cp_rd.get_coverage());
-        $display("  cp_full     = %0.2f%%", intf.cg_inst.cp_full.get_coverage());
-        $display("  cp_empty    = %0.2f%%", intf.cg_inst.cp_empty.get_coverage());
-        $display("  cp_op       = %0.2f%%", intf.cg_inst.cp_op.get_coverage());
-        $display("  cx_op_full  = %0.2f%%", intf.cg_inst.cx_op_full.get_coverage());
-        $display("  cx_op_empty = %0.2f%%", intf.cg_inst.cx_op_empty.get_coverage());
-        $display("--------------------------------");
-        $finish;
+      test_simul_rw(intf);
+      
+      test_simul_rw_at_boundary(intf);
+      
+      test_final_closure(intf, env);
+      // ── FINAL REPORT ─────────────────────────────────
+repeat(5) @(posedge intf.clk);
+env.scb.report();
+$display("--------------------------------");
+$display("Covergroup Coverage = %0.2f%%",
+          tb_top.DUT.u_fifo_checker.cg_inst.get_coverage());
+      $display("  cp_wr       = %0.2f%%", tb_top.DUT.u_fifo_checker.cg_inst.cp_wr.get_coverage());
+      $display("  cp_rd       = %0.2f%%", tb_top.DUT.u_fifo_checker.cg_inst.cp_rd.get_coverage());
+      $display("  cp_full     = %0.2f%%", tb_top.DUT.u_fifo_checker.cg_inst.cp_full.get_coverage());
+      $display("  cp_empty    = %0.2f%%", tb_top.DUT.u_fifo_checker.cg_inst.cp_empty.get_coverage());
+      $display("  cp_op       = %0.2f%%", tb_top.DUT.u_fifo_checker.cg_inst.cp_op.get_coverage());
+      $display("  cp_count    = %0.2f%%", tb_top.DUT.u_fifo_checker.cg_inst.cp_count.get_coverage());
+      $display("  cx_op_full  = %0.2f%%", tb_top.DUT.u_fifo_checker.cg_inst.cx_op_full.get_coverage());
+      $display("  cx_op_empty = %0.2f%%", tb_top.DUT.u_fifo_checker.cg_inst.cx_op_empty.get_coverage());
+      $display("  cx_count_op = %0.2f%%", tb_top.DUT.u_fifo_checker.cg_inst.cx_count_op.get_coverage());
+$display("--------------------------------");
+$finish;
     end
-
-    // ── DIRECTED TEST 1: Fill FIFO to full ───────────────
+      // ── DIRECTED TEST 1: Fill FIFO to full ───────────────
     task test_fill(virtual fifo_if vif, environment env);
         $display("\n----- DIRECTED: Fill FIFO to full -----");
 
@@ -167,50 +172,130 @@ program test_prog (fifo_if intf);
         $display("[TEST] Ref model cleared after reset");
         repeat(3) @(posedge vif.clk);
     endtask
+  
+  //directed test 5 : simul rd and wr
+  task test_simul_rw(virtual fifo_if vif);
 
+   $display("\n----- DIRECTED: SIMULTANEOUS RW -----");
+
+   // preload FIFO
+   repeat (8) begin
+      @(posedge vif.clk);
+      vif.wr_en = 1;
+      vif.rd_en = 0;
+      vif.din   = $urandom;
+   end
+
+   @(posedge vif.clk);
+   vif.wr_en = 0;
+
+   // simultaneous read/write
+   repeat (10) begin
+      @(posedge vif.clk);
+      vif.wr_en = 1;
+      vif.rd_en = 1;
+      vif.din   = $urandom;
+   end
+
+   @(posedge vif.clk);
+   vif.wr_en = 0;
+   vif.rd_en = 0;
+
+endtask
+  
+  //directed test 6 sm read wr at count 31
+  task test_simul_rw_at_boundary(virtual fifo_if vif);
+
+    $display("\n----- DIRECTED: SIMULTANEOUS R/W AT COUNT 31 -----");
+
+    // Reset FIFO
+    @(negedge vif.clk);
+    vif.rst   = 1;
+    vif.wr_en = 0;
+    vif.rd_en = 0;
+
+    repeat (3) @(posedge vif.clk);
+
+    @(negedge vif.clk);
+    vif.rst = 0;
+
+    repeat (2) @(posedge vif.clk);
+
+    // Fill exactly 31 entries
+    repeat (31) begin
+        @(negedge vif.clk);
+        vif.wr_en = 1;
+        vif.rd_en = 0;
+        vif.din   = $urandom();
+    end
+
+    // Stop write and allow count to settle
+    @(negedge vif.clk);
+    vif.wr_en = 0;
+    vif.rd_en = 0;
+
+    @(posedge vif.clk);
+
+    // count must now be 31
+    $display("[TEST] Applying simultaneous R/W at count 31");
+
+    // Drive before the sampling edge
+    @(negedge vif.clk);
+    vif.wr_en = 1;
+    vif.rd_en = 1;
+    vif.din   = $urandom();
+
+    // Property samples count=31, wr_en=1, rd_en=1 here
+    @(posedge vif.clk);
+
+    @(negedge vif.clk);
+    vif.wr_en = 0;
+    vif.rd_en = 0;
+
+    repeat (2) @(posedge vif.clk);
+
+endtask
+
+  // ── DIRECTED TEST 7: Final coverage closure ──────────────
+// Closes exactly the 3 remaining gaps reported:
+//   cx_op_full   -> neither(idle) x full=1
+//   cx_op_empty  -> simul_rw x empty=1
+//   cx_count_op  -> simul_rw x empty_zone (and picks up low_zone simul_rw too)
+task test_final_closure(virtual fifo_if vif, environment env);
+    $display("\n----- DIRECTED: Final coverage closure -----");
+
+    // clean empty state
+    vif.rst = 1; repeat(3) @(posedge vif.clk);
+    vif.rst = 0; repeat(2) @(posedge vif.clk);
+    env.scb.ref_q = {};
+
+    // 1) simultaneous R/W while EMPTY -> cx_op_empty(simul_rw), cx_count_op(empty,simul_rw)
+    repeat(3) begin @(posedge vif.clk); #1; vif.wr_en=1; vif.rd_en=1; vif.din=$urandom(); end
+    vif.wr_en=0; vif.rd_en=0; repeat(2) @(posedge vif.clk);
+
+    // 2) simultaneous R/W while LOW_ZONE -> cx_count_op(low,simul_rw), extra safety net
+    repeat(4) begin @(posedge vif.clk); #1; vif.wr_en=1; vif.rd_en=0; vif.din=$urandom(); end
+    vif.wr_en=0; repeat(2) @(posedge vif.clk);
+    repeat(3) begin @(posedge vif.clk); #1; vif.wr_en=1; vif.rd_en=1; vif.din=$urandom(); end
+    vif.wr_en=0; vif.rd_en=0; repeat(2) @(posedge vif.clk);
+
+    // 3) fill to full, then IDLE while full -> cx_op_full(neither x full=1)
+    repeat(28) begin @(posedge vif.clk); #1; vif.wr_en=1; vif.rd_en=0; vif.din=$urandom(); end
+    vif.wr_en=0; repeat(3) @(posedge vif.clk);
+    if (vif.full) $display("[TEST] Reached full — closing idle-at-full gap");
+    else $display("[TEST] NOTE: not full yet, tell Claude the actual depth if this prints");
+    repeat(3) begin @(posedge vif.clk); #1; vif.wr_en=0; vif.rd_en=0; end
+
+    // drain back to empty, leave FIFO clean for anything after this
+    repeat(32) begin
+        @(posedge vif.clk); #1;
+        if (!vif.empty) begin vif.rd_en=1; vif.wr_en=0; end
+        else vif.rd_en=0;
+    end
+    vif.rd_en=0; repeat(3) @(posedge vif.clk);
+
+    $display("[TEST] Final coverage closure complete");
+endtask
+  
+  
 endprogram
-
-// ============================================================
-// 9. TB_TOP
-// ============================================================
-module tb_top;
-
-    bit clk;
-
-    always #5 clk = ~clk;
-
-    fifo_if intf (clk);
-
-    // drive rst through interface — not as a port
-    initial begin
-        intf.rst = 1;
-        repeat(5) @(posedge clk);
-        intf.rst = 0;
-    end
-
-    test_prog t1 (intf);
-
-    fifo DUT (
-        .data_op (intf.dout),
-        .full    (intf.full),
-        .empty   (intf.empty),
-        .data_in (intf.din),
-        .wr_en   (intf.wr_en),
-        .rd_en   (intf.rd_en),
-        .clk     (intf.clk),
-        .rst     (intf.rst)
-    );
-
-    // generous watchdog — 100 txns + directed tests need time
-    initial begin
-        #2_000_000;
-        $display("[TB] TIMEOUT — forcing finish");
-        $finish;
-    end
-
-    initial begin
-        $dumpfile("dump.vcd");
-        $dumpvars;
-    end
-
-endmodule
